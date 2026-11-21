@@ -1,0 +1,1196 @@
+name: Build TapPulse Pro APK
+
+on:
+push:
+branches: [ main, master ]
+workflow_dispatch:
+
+jobs:
+build:
+runs-on: ubuntu-latest
+
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
+
+  - name: Set up JDK 17
+    uses: actions/setup-java@v4
+    with:
+      java-version: '17'
+      distribution: 'temurin'
+
+  - name: Setup Android SDK
+    uses: android-actions/setup-android@v3
+
+  - name: Setup Gradle
+    uses: gradle/actions/setup-gradle@v4
+    with:
+      gradle-version: '8.7'
+
+  - name: Generate TapPulse Pro Android Project
+    shell: bash
+    run: |
+      mkdir -p app/src/main/java/com/tappulse/pro
+      mkdir -p app/src/main/res/drawable
+      mkdir -p app/src/main/res/values
+      mkdir -p app/src/main/res/xml
+
+      # ---------------------------------------------------------
+      # 1. gradle.properties
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > gradle.properties
+      org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+      android.useAndroidX=true
+      kotlin.code.style=official
+      android.nonTransitiveRClass=true
+      FILE_EOF
+
+      # ---------------------------------------------------------
+      # 2. settings.gradle.kts
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > settings.gradle.kts
+      pluginManagement {
+          repositories {
+              google()
+              mavenCentral()
+              gradlePluginPortal()
+          }
+      }
+      dependencyResolutionManagement {
+          repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+          repositories {
+              google()
+              mavenCentral()
+          }
+      }
+      rootProject.name = "TapPulsePro"
+      include(":app")
+      FILE_EOF
+
+      # ---------------------------------------------------------
+      # 3. Root build.gradle.kts
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > build.gradle.kts
+      plugins {
+          id("com.android.application") version "8.5.2" apply false
+          id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+      }
+      FILE_EOF
+
+      # ---------------------------------------------------------
+      # 4. App build.gradle.kts
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > app/build.gradle.kts
+      plugins {
+          id("com.android.application")
+          id("org.jetbrains.kotlin.android")
+      }
+
+      android {
+          namespace = "com.tappulse.pro"
+          compileSdk = 34
+
+          defaultConfig {
+              applicationId = "com.tappulse.pro"
+              minSdk = 26
+              targetSdk = 34
+              versionCode = 1
+              versionName = "1.0.0"
+          }
+
+          buildTypes {
+              release {
+                  isMinifyEnabled = false
+              }
+          }
+
+          compileOptions {
+              sourceCompatibility = JavaVersion.VERSION_17
+              targetCompatibility = JavaVersion.VERSION_17
+          }
+
+          kotlinOptions {
+              jvmTarget = "17"
+          }
+      }
+
+      dependencies {
+          implementation("androidx.core:core-ktx:1.13.1")
+          implementation("androidx.appcompat:appcompat:1.7.0")
+          implementation("com.google.android.material:material:1.12.0")
+      }
+      FILE_EOF
+
+      # ---------------------------------------------------------
+      # 5. AndroidManifest.xml
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > app/src/main/AndroidManifest.xml
+      <?xml version="1.0" encoding="utf-8"?>
+      <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+          <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+          <application
+              android:allowBackup="true"
+              android:icon="@drawable/ic_launcher"
+              android:label="@string/app_name"
+              android:supportsRtl="true"
+              android:theme="@style/Theme.TapPulsePro">
+
+              <activity
+                  android:name=".MainActivity"
+                  android:exported="true"
+                  android:screenOrientation="portrait">
+                  <intent-filter>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.LAUNCHER" />
+                  </intent-filter>
+              </activity>
+
+              <service
+                  android:name=".TapAccessibilityService"
+                  android:exported="true"
+                  android:label="@string/app_name"
+                  android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+                  <intent-filter>
+                      <action android:name="android.accessibilityservice.AccessibilityService" />
+                  </intent-filter>
+                  <meta-data
+                      android:name="android.accessibilityservice"
+                      android:resource="@xml/accessibility_service_config" />
+              </service>
+          </application>
+      </manifest>
+      FILE_EOF
+
+      # ---------------------------------------------------------
+      # 6. Resources (strings, themes, accessibility config, icon)
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > app/src/main/res/values/strings.xml
+      <?xml version="1.0" encoding="utf-8"?>
+      <resources>
+          <string name="app_name">TapPulse Pro</string>
+          <string name="accessibility_desc">تُستخدم خدمة إمكانية الوصول لتنفيذ ضغطات النقر التلقائي على النقطة التي تحددها فوق تطبيقات البث المباشر مثل تيك توك.</string>
+      </resources>
+      FILE_EOF
+
+      cat << 'FILE_EOF' > app/src/main/res/values/themes.xml
+      <?xml version="1.0" encoding="utf-8"?>
+      <resources>
+          <style name="Theme.TapPulsePro" parent="Theme.Material3.Dark.NoActionBar">
+              <item name="android:statusBarColor">#0B0F19</item>
+              <item name="android:navigationBarColor">#0B0F19</item>
+              <item name="android:windowBackground">#0B0F19</item>
+          </style>
+      </resources>
+      FILE_EOF
+
+      cat << 'FILE_EOF' > app/src/main/res/xml/accessibility_service_config.xml
+      <?xml version="1.0" encoding="utf-8"?>
+      <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+          android:accessibilityEventTypes="typeWindowStateChanged"
+          android:accessibilityFeedbackType="feedbackGeneric"
+          android:accessibilityFlags="flagDefault"
+          android:canPerformGestures="true"
+          android:description="@string/accessibility_desc"
+          android:notificationTimeout="100" />
+      FILE_EOF
+
+      cat << 'FILE_EOF' > app/src/main/res/drawable/ic_launcher.xml
+      <?xml version="1.0" encoding="utf-8"?>
+      <vector xmlns:android="http://schemas.android.com/apk/res/android"
+          android:width="108dp"
+          android:height="108dp"
+          android:viewportWidth="108"
+          android:viewportHeight="108">
+          <path
+              android:fillColor="#0F172A"
+              android:pathData="M0,0h108v108h-108z" />
+          <path
+              android:strokeColor="#22D3EE"
+              android:strokeWidth="6"
+              android:fillColor="#00000000"
+              android:pathData="M54,22 A32,32 0 1,0 54,86 A32,32 0 1,0 54,22 Z" />
+          <path
+              android:strokeColor="#EC4899"
+              android:strokeWidth="5"
+              android:fillColor="#00000000"
+              android:pathData="M54,38 A16,16 0 1,0 54,70 A16,16 0 1,0 54,38 Z" />
+          <path
+              android:fillColor="#FFFFFF"
+              android:pathData="M54,48 A6,6 0 1,0 54,60 A6,6 0 1,0 54,48 Z" />
+      </vector>
+      FILE_EOF
+
+      # ---------------------------------------------------------
+      # 7. TapConfig.kt (Shared Settings Manager)
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > app/src/main/java/com/tappulse/pro/TapConfig.kt
+      package com.tappulse.pro
+
+      import android.content.Context
+
+      object TapConfig {
+          private const val PREFS_NAME = "tappulse_prefs"
+          private const val KEY_SPEED_MS = "speed_ms"
+          private const val KEY_ANTI_BAN = "anti_ban"
+          private const val KEY_AUTO_STOP = "auto_stop"
+          private const val KEY_PRESET = "preset"
+
+          var speedMs: Long = 75L
+          var antiBan: Boolean = true
+          var autoStopLimit: Int = 0
+          var preset: String = "tiktok"
+
+          fun load(context: Context) {
+              val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+              speedMs = prefs.getLong(KEY_SPEED_MS, 75L)
+              antiBan = prefs.getBoolean(KEY_ANTI_BAN, true)
+              autoStopLimit = prefs.getInt(KEY_AUTO_STOP, 0)
+              preset = prefs.getString(KEY_PRESET, "tiktok") ?: "tiktok"
+          }
+
+          fun save(context: Context) {
+              context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                  .putLong(KEY_SPEED_MS, speedMs)
+                  .putBoolean(KEY_ANTI_BAN, antiBan)
+                  .putInt(KEY_AUTO_STOP, autoStopLimit)
+                  .putString(KEY_PRESET, preset)
+                  .apply()
+          }
+      }
+      FILE_EOF
+
+      # ---------------------------------------------------------
+      # 8. TapAccessibilityService.kt (Floating Overlay + Real Taps)
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > app/src/main/java/com/tappulse/pro/TapAccessibilityService.kt
+      package com.tappulse.pro
+
+      import android.accessibilityservice.AccessibilityService
+      import android.accessibilityservice.GestureDescription
+      import android.content.Intent
+      import android.graphics.Color
+      import android.graphics.Path
+      import android.graphics.PixelFormat
+      import android.graphics.Typeface
+      import android.graphics.drawable.GradientDrawable
+      import android.os.Handler
+      import android.os.Looper
+      import android.view.Gravity
+      import android.view.MotionEvent
+      import android.view.View
+      import android.view.WindowManager
+      import android.view.accessibility.AccessibilityEvent
+      import android.widget.FrameLayout
+      import android.widget.LinearLayout
+      import android.widget.TextView
+      import android.widget.Toast
+      import kotlin.math.abs
+      import kotlin.random.Random
+
+      class TapAccessibilityService : AccessibilityService() {
+
+          companion object {
+              var instance: TapAccessibilityService? = null
+          }
+
+          private lateinit var windowManager: WindowManager
+          private val handler = Handler(Looper.getMainLooper())
+
+          private var targetView: FrameLayout? = null
+          private var targetParams: WindowManager.LayoutParams? = null
+          private var targetRingDrawable: GradientDrawable? = null
+
+          private var pillView: LinearLayout? = null
+          private var pillParams: WindowManager.LayoutParams? = null
+          private var playPauseBtn: TextView? = null
+          private var lockBtn: TextView? = null
+          private var extraControlsContainer: LinearLayout? = null
+          private var minimizeBtn: TextView? = null
+
+          private var isRunning = false
+          private var isLocked = false
+          private var isMinimized = false
+          private var sessionTaps = 0
+
+          private val tapRunnable = object : Runnable {
+              override fun run() {
+                  if (!isRunning) return
+                  performRealTap()
+
+                  val limit = TapConfig.autoStopLimit
+                  if (limit > 0 && sessionTaps >= limit) {
+                      stopClicking()
+                      Toast.makeText(
+                          this@TapAccessibilityService,
+                          "اكتمل الهدف ($limit ضغطة) وتم الإيقاف تلقائياً 🎯",
+                          Toast.LENGTH_SHORT
+                      ).show()
+                      return
+                  }
+
+                  val baseSpeed = TapConfig.speedMs
+                  val nextDelay = if (TapConfig.antiBan) {
+                      val jitter = (baseSpeed * 0.28).toLong().coerceAtLeast(10L)
+                      (baseSpeed + Random.nextLong(-jitter, jitter + 1)).coerceAtLeast(20L)
+                  } else {
+                      baseSpeed
+                  }
+                  handler.postDelayed(this, nextDelay)
+              }
+          }
+
+          override fun onServiceConnected() {
+              super.onServiceConnected()
+              instance = this
+              TapConfig.load(this)
+              windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+          }
+
+          override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+              // Not needed; gestures are triggered via floating overlay
+          }
+
+          override fun onInterrupt() {
+              stopClicking()
+          }
+
+          override fun onUnbind(intent: Intent?): Boolean {
+              hideOverlay()
+              instance = null
+              return super.onUnbind(intent)
+          }
+
+          override fun onDestroy() {
+              hideOverlay()
+              instance = null
+              super.onDestroy()
+          }
+
+          fun isOverlayVisible(): Boolean = targetView != null
+
+          private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+          fun showOverlay() {
+              if (targetView != null) return
+              TapConfig.load(this)
+              try {
+                  createTargetCrosshair()
+                  createFloatingPill()
+              } catch (e: Exception) {
+                  Toast.makeText(this, "تعذر إظهار المؤشر: تأكد من صلاحية الظهور فوق التطبيقات", Toast.LENGTH_LONG).show()
+              }
+          }
+
+          fun hideOverlay() {
+              stopClicking()
+              targetView?.let {
+                  try { windowManager.removeView(it) } catch (_: Exception) {}
+              }
+              pillView?.let {
+                  try { windowManager.removeView(it) } catch (_: Exception) {}
+              }
+              targetView = null
+              pillView = null
+          }
+
+          private fun createTargetCrosshair() {
+              val size = dp(58)
+              val container = FrameLayout(this)
+
+              val ring = GradientDrawable().apply {
+                  shape = GradientDrawable.OVAL
+                  setColor(Color.parseColor("#2622D3EE"))
+                  setStroke(dp(3), Color.parseColor("#22D3EE"))
+              }
+              targetRingDrawable = ring
+              container.background = ring
+
+              val centerDot = View(this).apply {
+                  background = GradientDrawable().apply {
+                      shape = GradientDrawable.OVAL
+                      setColor(Color.parseColor("#EC4899"))
+                      setStroke(dp(2), Color.WHITE)
+                  }
+              }
+              val dotSize = dp(12)
+              container.addView(centerDot, FrameLayout.LayoutParams(dotSize, dotSize, Gravity.CENTER))
+
+              val metrics = resources.displayMetrics
+              val params = WindowManager.LayoutParams(
+                  size,
+                  size,
+                  WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                  WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                  PixelFormat.TRANSLUCENT
+              ).apply {
+                  gravity = Gravity.TOP or Gravity.LEFT
+                  x = (metrics.widthPixels / 2) - (size / 2)
+                  y = (metrics.heightPixels / 2) - (size / 2)
+              }
+
+              var initialX = 0
+              var initialY = 0
+              var initialTouchX = 0f
+              var initialTouchY = 0f
+
+              container.setOnTouchListener { _, event ->
+                  if (isLocked || isRunning) return@setOnTouchListener false
+                  when (event.action) {
+                      MotionEvent.ACTION_DOWN -> {
+                          initialX = params.x
+                          initialY = params.y
+                          initialTouchX = event.rawX
+                          initialTouchY = event.rawY
+                          true
+                      }
+                      MotionEvent.ACTION_MOVE -> {
+                          params.x = initialX + (event.rawX - initialTouchX).toInt()
+                          params.y = initialY + (event.rawY - initialTouchY).toInt()
+                          try { windowManager.updateViewLayout(container, params) } catch (_: Exception) {}
+                          true
+                      }
+                      else -> false
+                  }
+              }
+
+              targetView = container
+              targetParams = params
+              windowManager.addView(container, params)
+          }
+
+          private fun createFloatingPill() {
+              val pill = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  gravity = Gravity.CENTER_HORIZONTAL
+                  setPadding(dp(7), dp(10), dp(7), dp(10))
+                  background = GradientDrawable().apply {
+                      cornerRadius = dp(28).toFloat()
+                      setColor(Color.parseColor("#E60F1422"))
+                      setStroke(dp(1), Color.parseColor("#33FFFFFF"))
+                  }
+              }
+
+              // Top drag handle bar
+              val handleBar = View(this).apply {
+                  background = GradientDrawable().apply {
+                      cornerRadius = dp(4).toFloat()
+                      setColor(Color.parseColor("#6694A3B8"))
+                  }
+              }
+              pill.addView(handleBar, LinearLayout.LayoutParams(dp(22), dp(4)).apply {
+                  bottomMargin = dp(8)
+              })
+
+              // Play / Pause Button
+              val btnPlay = createPillCircleButton("▶", "#22D3EE", "#0B0F19", 44).apply {
+                  setOnClickListener {
+                      if (isRunning) stopClicking() else startClicking()
+                  }
+              }
+              playPauseBtn = btnPlay
+              pill.addView(btnPlay, LinearLayout.LayoutParams(dp(44), dp(44)).apply {
+                  bottomMargin = dp(8)
+              })
+
+              // Extra expandable controls
+              val extras = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  gravity = Gravity.CENTER_HORIZONTAL
+              }
+
+              // Lock / Unlock button
+              val btnLock = createPillCircleButton("🔓", "#1E293B", "#FFFFFF", 40).apply {
+                  setOnClickListener { toggleLock() }
+              }
+              lockBtn = btnLock
+              extras.addView(btnLock, LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                  bottomMargin = dp(8)
+              })
+
+              // Close overlay button
+              val btnClose = createPillCircleButton("✕", "#3F1D2E", "#FB7185", 40).apply {
+                  setOnClickListener { hideOverlay() }
+              }
+              extras.addView(btnClose, LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                  bottomMargin = dp(8)
+              })
+
+              extraControlsContainer = extras
+              pill.addView(extras)
+
+              // Minimize / Expand button
+              val btnMin = createPillCircleButton("▲", "#1E293B", "#CBD5E1", 34).apply {
+                  textSize = 11f
+                  setOnClickListener { toggleMinimize() }
+              }
+              minimizeBtn = btnMin
+              pill.addView(btnMin, LinearLayout.LayoutParams(dp(34), dp(34)))
+
+              val params = WindowManager.LayoutParams(
+                  WindowManager.LayoutParams.WRAP_CONTENT,
+                  WindowManager.LayoutParams.WRAP_CONTENT,
+                  WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                  WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                  PixelFormat.TRANSLUCENT
+              ).apply {
+                  gravity = Gravity.TOP or Gravity.LEFT
+                  x = dp(12)
+                  y = dp(220)
+              }
+
+              // Make the entire pill draggable when dragged
+              var initialX = 0
+              var initialY = 0
+              var initialTouchX = 0f
+              var initialTouchY = 0f
+              var isDragging = false
+
+              val dragListener = View.OnTouchListener { v, event ->
+                  when (event.action) {
+                      MotionEvent.ACTION_DOWN -> {
+                          initialX = params.x
+                          initialY = params.y
+                          initialTouchX = event.rawX
+                          initialTouchY = event.rawY
+                          isDragging = false
+                          false
+                      }
+                      MotionEvent.ACTION_MOVE -> {
+                          val dx = event.rawX - initialTouchX
+                          val dy = event.rawY - initialTouchY
+                          if (abs(dx) > 8 || abs(dy) > 8) {
+                              isDragging = true
+                              params.x = initialX + dx.toInt()
+                              params.y = initialY + dy.toInt()
+                              try { windowManager.updateViewLayout(pill, params) } catch (_: Exception) {}
+                              true
+                          } else {
+                              false
+                          }
+                      }
+                      MotionEvent.ACTION_UP -> {
+                          if (isDragging) {
+                              isDragging = false
+                              true
+                          } else {
+                              v.performClick()
+                              false
+                          }
+                      }
+                      else -> false
+                  }
+              }
+              pill.setOnTouchListener(dragListener)
+
+              pillView = pill
+              pillParams = params
+              windowManager.addView(pill, params)
+          }
+
+          private fun createPillCircleButton(label: String, bgHex: String, textHex: String, sizeDp: Int): TextView {
+              return TextView(this).apply {
+                  text = label
+                  textSize = 15f
+                  typeface = Typeface.DEFAULT_BOLD
+                  gravity = Gravity.CENTER
+                  setTextColor(Color.parseColor(textHex))
+                  background = GradientDrawable().apply {
+                      shape = GradientDrawable.OVAL
+                      setColor(Color.parseColor(bgHex))
+                  }
+              }
+          }
+
+          private fun startClicking() {
+              isRunning = true
+              sessionTaps = 0
+              updateTargetTouchability(passThrough = true)
+
+              targetRingDrawable?.apply {
+                  setColor(Color.parseColor("#26EC4899"))
+                  setStroke(dp(3), Color.parseColor("#EC4899"))
+              }
+              playPauseBtn?.apply {
+                  text = "⏸"
+                  setTextColor(Color.WHITE)
+                  background = GradientDrawable().apply {
+                      shape = GradientDrawable.OVAL
+                      setColor(Color.parseColor("#F43F5E"))
+                  }
+              }
+              handler.post(tapRunnable)
+          }
+
+          private fun stopClicking() {
+              isRunning = false
+              handler.removeCallbacks(tapRunnable)
+              updateTargetTouchability(passThrough = isLocked)
+
+              targetRingDrawable?.apply {
+                  setColor(Color.parseColor("#2622D3EE"))
+                  setStroke(dp(3), Color.parseColor("#22D3EE"))
+              }
+              playPauseBtn?.apply {
+                  text = "▶"
+                  setTextColor(Color.parseColor("#0B0F19"))
+                  background = GradientDrawable().apply {
+                      shape = GradientDrawable.OVAL
+                      setColor(Color.parseColor("#22D3EE"))
+                  }
+              }
+          }
+
+          private fun toggleLock() {
+              isLocked = !isLocked
+              updateTargetTouchability(passThrough = isLocked || isRunning)
+              lockBtn?.text = if (isLocked) "🔒" else "🔓"
+              lockBtn?.background = GradientDrawable().apply {
+                  shape = GradientDrawable.OVAL
+                  setColor(Color.parseColor(if (isLocked) "#451A03" else "#1E293B"))
+              }
+              Toast.makeText(
+                  this,
+                  if (isLocked) "تم قفل مكان المؤشر 🔒" else "يمكنك تحريك المؤشر الآن 🔓",
+                  Toast.LENGTH_SHORT
+              ).show()
+          }
+
+          private fun toggleMinimize() {
+              isMinimized = !isMinimized
+              extraControlsContainer?.visibility = if (isMinimized) View.GONE else View.VISIBLE
+              minimizeBtn?.text = if (isMinimized) "▼" else "▲"
+          }
+
+          // Crucial: Makes the crosshair pass taps directly through to TikTok underneath!
+          private fun updateTargetTouchability(passThrough: Boolean) {
+              val view = targetView ?: return
+              val params = targetParams ?: return
+              params.flags = if (passThrough) {
+                  WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                      WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                      WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+              } else {
+                  WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                      WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+              }
+              try {
+                  windowManager.updateViewLayout(view, params)
+              } catch (_: Exception) {}
+          }
+
+          private fun performRealTap() {
+              val view = targetView ?: return
+              val location = IntArray(2)
+              view.getLocationOnScreen(location)
+
+              var tapX = location[0] + (view.width / 2f)
+              var tapY = location[1] + (view.height / 2f)
+
+              // Apply Anti-Ban Human Spatial Jitter
+              if (TapConfig.antiBan) {
+                  tapX = (tapX + Random.nextFloat() * 14f - 7f).coerceAtLeast(1f)
+                  tapY = (tapY + Random.nextFloat() * 14f - 7f).coerceAtLeast(1f)
+              }
+
+              val path = Path().apply { moveTo(tapX, tapY) }
+              val duration = if (TapConfig.antiBan) Random.nextLong(18L, 38L) else 20L
+              val stroke = GestureDescription.StrokeDescription(path, 0L, duration)
+              val gesture = GestureDescription.Builder().addStroke(stroke).build()
+
+              dispatchGesture(gesture, null, null)
+              sessionTaps++
+          }
+      }
+      FILE_EOF
+
+      # ---------------------------------------------------------
+      # 9. MainActivity.kt (Sleek Dark Glassmorphism Dashboard)
+      # ---------------------------------------------------------
+      cat << 'FILE_EOF' > app/src/main/java/com/tappulse/pro/MainActivity.kt
+      package com.tappulse.pro
+
+      import android.content.Intent
+      import android.graphics.Color
+      import android.graphics.Typeface
+      import android.graphics.drawable.GradientDrawable
+      import android.net.Uri
+      import android.os.Bundle
+      import android.provider.Settings
+      import android.view.Gravity
+      import android.view.View
+      import android.widget.LinearLayout
+      import android.widget.ScrollView
+      import android.widget.SeekBar
+      import android.widget.TextView
+      import android.widget.Toast
+      import androidx.appcompat.app.AppCompatActivity
+      import com.google.android.material.switchmaterial.SwitchMaterial
+
+      class MainActivity : AppCompatActivity() {
+
+          private lateinit var statusBadge: TextView
+          private lateinit var overlayStatusText: TextView
+          private lateinit var accessStatusText: TextView
+          private lateinit var speedLabel: TextView
+          private lateinit var speedSeekBar: SeekBar
+          private lateinit var antiBanSwitch: SwitchMaterial
+          private lateinit var launchBtn: TextView
+
+          private val presetButtons = mutableMapOf<String, LinearLayout>()
+          private val timerChips = mutableMapOf<Int, TextView>()
+
+          override fun onCreate(savedInstanceState: Bundle?) {
+              super.onCreate(savedInstanceState)
+              TapConfig.load(this)
+              window.decorView.layoutDirection = View.LAYOUT_DIRECTION_RTL
+              setContentView(buildDashboardUI())
+              refreshConfigUI()
+          }
+
+          override fun onResume() {
+              super.onResume()
+              refreshPermissionStatuses()
+          }
+
+          private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+          private fun roundedBg(colorHex: String, radiusDp: Int, strokeHex: String? = null, strokeDp: Int = 1): GradientDrawable {
+              return GradientDrawable().apply {
+                  cornerRadius = dp(radiusDp).toFloat()
+                  setColor(Color.parseColor(colorHex))
+                  if (strokeHex != null) {
+                      setStroke(dp(strokeDp), Color.parseColor(strokeHex))
+                  }
+              }
+          }
+
+          private fun buildDashboardUI(): View {
+              val root = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  setBackgroundColor(Color.parseColor("#0B0F19"))
+              }
+
+              val scroll = ScrollView(this).apply {
+                  isVerticalScrollBarEnabled = false
+              }
+
+              val content = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  setPadding(dp(20), dp(24), dp(20), dp(32))
+              }
+
+              // --- Header ---
+              val header = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+              }
+
+              val titleBox = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+              }
+              val titleText = TextView(this).apply {
+                  text = "TapPulse Pro"
+                  textSize = 22f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setTextColor(Color.WHITE)
+              }
+              val subText = TextView(this).apply {
+                  text = "النقر التلقائي الذكي للايفات تيك توك"
+                  textSize = 12f
+                  setTextColor(Color.parseColor("#94A3B8"))
+              }
+              titleBox.addView(titleText)
+              titleBox.addView(subText)
+
+              statusBadge = TextView(this).apply {
+                  text = "متوقف"
+                  textSize = 12f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setPadding(dp(14), dp(6), dp(14), dp(6))
+                  background = roundedBg("#1E293B", 20, "#334155")
+                  setTextColor(Color.parseColor("#94A3B8"))
+              }
+
+              header.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+              header.addView(statusBadge)
+              content.addView(header, LinearLayout.LayoutParams(
+                  LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+              ).apply { bottomMargin = dp(24) })
+
+              // --- Section 1: Permissions ---
+              content.addView(sectionHeader("1. أذونات العمل بالخلفية (مطلوبة)"))
+
+              overlayStatusText = TextView(this)
+              content.addView(permissionCard(
+                  title = "الظهور فوق التطبيقات",
+                  subtitle = "لإظهار المؤشر العائم وشريط التحكم فوق تيك توك",
+                  statusView = overlayStatusText
+              ) {
+                  val intent = Intent(
+                      Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                      Uri.parse("package:$packageName")
+                  )
+                  startActivity(intent)
+              })
+
+              accessStatusText = TextView(this)
+              content.addView(permissionCard(
+                  title = "خدمة إمكانية الوصول",
+                  subtitle = "لتنفيذ ضغطات اللايك تلقائياً بالخلفية",
+                  statusView = accessStatusText
+              ) {
+                  Toast.makeText(this, "اختر TapPulse Pro من القائمة وفعّله", Toast.LENGTH_LONG).show()
+                  startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+              })
+
+              // --- Section 2: Presets ---
+              content.addView(sectionHeader("2. اختر وضع النقر").apply {
+                  (layoutParams as? LinearLayout.LayoutParams)?.topMargin = dp(10)
+              })
+
+              val presetRow = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+              }
+              val presets = listOf(
+                  Triple("tiktok", "🛡️ لايف آمن", "مضاد للحظر"),
+                  Triple("turbo", "⚡ تيربو", "أقصى سرعة"),
+                  Triple("custom", "🎛️ مخصص", "تحكم يدوي")
+              )
+              presets.forEachIndexed { idx, (id, title, sub) ->
+                  val card = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER
+                      setPadding(dp(8), dp(14), dp(8), dp(14))
+                      background = roundedBg("#141A2A", 18, "#263248")
+                      setOnClickListener { selectPreset(id) }
+                  }
+                  card.addView(TextView(this).apply {
+                      text = title
+                      textSize = 13f
+                      typeface = Typeface.DEFAULT_BOLD
+                      setTextColor(Color.WHITE)
+                      gravity = Gravity.CENTER
+                  })
+                  card.addView(TextView(this).apply {
+                      text = sub
+                      textSize = 10f
+                      setTextColor(Color.parseColor("#94A3B8"))
+                      gravity = Gravity.CENTER
+                  })
+                  presetButtons[id] = card
+                  presetRow.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                      if (idx < 2) marginEnd = dp(8)
+                  })
+              }
+              content.addView(presetRow, LinearLayout.LayoutParams(
+                  LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+              ).apply { bottomMargin = dp(18) })
+
+              // --- Section 3: Fine Tuning Card ---
+              val settingsCard = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  setPadding(dp(18), dp(18), dp(18), dp(18))
+                  background = roundedBg("#141A2A", 22, "#22304A")
+              }
+
+              val speedHeader = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+              }
+              speedHeader.addView(TextView(this).apply {
+                  text = "سرعة النقر (الفاصل الزمني)"
+                  textSize = 13f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setTextColor(Color.parseColor("#E2E8F0"))
+              }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+              speedLabel = TextView(this).apply {
+                  textSize = 12f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setTextColor(Color.parseColor("#22D3EE"))
+              }
+              speedHeader.addView(speedLabel)
+              settingsCard.addView(speedHeader)
+
+              speedSeekBar = SeekBar(this).apply {
+                  max = 45 // 25ms to 250ms in steps of 5ms
+                  setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                      override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                          val ms = 25L + (progress * 5L)
+                          TapConfig.speedMs = ms
+                          val cps = (1000 / ms).toInt()
+                          speedLabel.text = "$ms ملي ثانية (~$cps/ث)"
+                          if (fromUser) {
+                              TapConfig.preset = "custom"
+                              TapConfig.save(this@MainActivity)
+                              updatePresetStyles()
+                          }
+                      }
+                      override fun onStartTrackingTouch(sb: SeekBar?) {}
+                      override fun onStopTrackingTouch(sb: SeekBar?) {
+                          TapConfig.save(this@MainActivity)
+                      }
+                  })
+              }
+              settingsCard.addView(speedSeekBar, LinearLayout.LayoutParams(
+                  LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+              ).apply {
+                  topMargin = dp(10)
+                  bottomMargin = dp(16)
+              })
+
+              // Anti-Ban Switch Row
+              val antiBanRow = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+              }
+              val antiBanTextBox = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+              }
+              antiBanTextBox.addView(TextView(this).apply {
+                  text = "التشتيت البشري الذكي (مضاد للحظر)"
+                  textSize = 13f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setTextColor(Color.WHITE)
+              })
+              antiBanTextBox.addView(TextView(this).apply {
+                  text = "يغيّر مكان وتوقيت الضغطة بشكل طفيف لكي لا يتجمد عدّاد اللايكات"
+                  textSize = 11f
+                  setTextColor(Color.parseColor("#94A3B8"))
+              })
+              antiBanSwitch = SwitchMaterial(this).apply {
+                  setOnCheckedChangeListener { _, isChecked ->
+                      TapConfig.antiBan = isChecked
+                      TapConfig.save(this@MainActivity)
+                  }
+              }
+              antiBanRow.addView(antiBanTextBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+              antiBanRow.addView(antiBanSwitch)
+              settingsCard.addView(antiBanRow, LinearLayout.LayoutParams(
+                  LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+              ).apply { bottomMargin = dp(18) })
+
+              // Auto Stop Limit Chips
+              settingsCard.addView(TextView(this).apply {
+                  text = "إيقاف تلقائي بعد:"
+                  textSize = 12f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setTextColor(Color.parseColor("#CBD5E1"))
+              }, LinearLayout.LayoutParams(
+                  LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+              ).apply { bottomMargin = dp(8) })
+
+              val chipRow = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+              }
+              val limits = listOf(0 to "بلا حد", 100 to "100 لايك", 500 to "500 لايك", 1000 to "1000 لايك")
+              limits.forEachIndexed { idx, (limit, label) ->
+                  val chip = TextView(this).apply {
+                      text = label
+                      textSize = 11f
+                      typeface = Typeface.DEFAULT_BOLD
+                      gravity = Gravity.CENTER
+                      setPadding(dp(8), dp(8), dp(8), dp(8))
+                      setOnClickListener {
+                          TapConfig.autoStopLimit = limit
+                          TapConfig.save(this@MainActivity)
+                          updateTimerChipStyles()
+                      }
+                  }
+                  timerChips[limit] = chip
+                  chipRow.addView(chip, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                      if (idx < limits.lastIndex) marginEnd = dp(6)
+                  })
+              }
+              settingsCard.addView(chipRow)
+
+              content.addView(settingsCard, LinearLayout.LayoutParams(
+                  LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+              ).apply { bottomMargin = dp(24) })
+
+              // --- Main CTA Launch Button ---
+              launchBtn = TextView(this).apply {
+                  text = "🚀 تفعيل المؤشر العائم الآن"
+                  textSize = 16f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setTextColor(Color.WHITE)
+                  gravity = Gravity.CENTER
+                  setPadding(dp(16), dp(16), dp(16), dp(16))
+                  background = GradientDrawable(
+                      GradientDrawable.Orientation.RIGHT_LEFT,
+                      intArrayOf(
+                          Color.parseColor("#06B6D4"),
+                          Color.parseColor("#D946EF"),
+                          Color.parseColor("#F43F5E")
+                      )
+                  ).apply { cornerRadius = dp(18).toFloat() }
+                  setOnClickListener { handleLaunchClick() }
+              }
+              content.addView(launchBtn)
+
+              scroll.addView(content)
+              root.addView(scroll, LinearLayout.LayoutParams(
+                  LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT
+              ))
+              return root
+          }
+
+          private fun sectionHeader(text: String): TextView {
+              return TextView(this).apply {
+                  this.text = text
+                  textSize = 14f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setTextColor(Color.parseColor("#CBD5E1"))
+                  layoutParams = LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                  ).apply { bottomMargin = dp(10) }
+              }
+          }
+
+          private fun permissionCard(
+              title: String,
+              subtitle: String,
+              statusView: TextView,
+              onClick: () -> Unit
+          ): LinearLayout {
+              val card = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+                  setPadding(dp(16), dp(14), dp(16), dp(14))
+                  background = roundedBg("#141A2A", 18, "#22304A")
+                  setOnClickListener { onClick() }
+                  layoutParams = LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                  ).apply { bottomMargin = dp(10) }
+              }
+
+              val textBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+              textBox.addView(TextView(this).apply {
+                  text = title
+                  textSize = 14f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setTextColor(Color.WHITE)
+              })
+              textBox.addView(TextView(this).apply {
+                  text = subtitle
+                  textSize = 11f
+                  setTextColor(Color.parseColor("#94A3B8"))
+              })
+
+              statusView.apply {
+                  textSize = 11f
+                  typeface = Typeface.DEFAULT_BOLD
+                  setPadding(dp(10), dp(5), dp(10), dp(5))
+              }
+
+              card.addView(textBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+              card.addView(statusView)
+              return card
+          }
+
+          private fun selectPreset(preset: String) {
+              TapConfig.preset = preset
+              when (preset) {
+                  "tiktok" -> {
+                      TapConfig.speedMs = 75L
+                      TapConfig.antiBan = true
+                  }
+                  "turbo" -> {
+                      TapConfig.speedMs = 30L
+                  }
+              }
+              TapConfig.save(this)
+              refreshConfigUI()
+          }
+
+          private fun refreshConfigUI() {
+              speedSeekBar.progress = ((TapConfig.speedMs - 25L) / 5L).toInt().coerceIn(0, 45)
+              val cps = (1000 / TapConfig.speedMs).toInt()
+              speedLabel.text = "${TapConfig.speedMs} ملي ثانية (~$cps/ث)"
+              antiBanSwitch.isChecked = TapConfig.antiBan
+              updatePresetStyles()
+              updateTimerChipStyles()
+          }
+
+          private fun updatePresetStyles() {
+              presetButtons.forEach { (id, view) ->
+                  if (id == TapConfig.preset) {
+                      view.background = roundedBg("#164E63", 18, "#22D3EE", 2)
+                  } else {
+                      view.background = roundedBg("#141A2A", 18, "#263248", 1)
+                  }
+              }
+          }
+
+          private fun updateTimerChipStyles() {
+              timerChips.forEach { (limit, view) ->
+                  if (limit == TapConfig.autoStopLimit) {
+                      view.background = roundedBg("#4C1D4B", 12, "#EC4899", 1)
+                      view.setTextColor(Color.parseColor("#F9A8D4"))
+                  } else {
+                      view.background = roundedBg("#1E293B", 12, "#334155", 1)
+                      view.setTextColor(Color.parseColor("#94A3B8"))
+                  }
+              }
+          }
+
+          private fun refreshPermissionStatuses() {
+              val hasOverlay = Settings.canDrawOverlays(this)
+              val hasAccessibility = TapAccessibilityService.instance != null
+
+              overlayStatusText.text = if (hasOverlay) "مفعّل ✓" else "تفعيل ◀"
+              overlayStatusText.setTextColor(Color.parseColor(if (hasOverlay) "#34D399" else "#FBBF24"))
+              overlayStatusText.background = roundedBg(if (hasOverlay) "#064E3B" else "#451A03", 12)
+
+              accessStatusText.text = if (hasAccessibility) "مفعّل ✓" else "تفعيل ◀"
+              accessStatusText.setTextColor(Color.parseColor(if (hasAccessibility) "#34D399" else "#FBBF24"))
+              accessStatusText.background = roundedBg(if (hasAccessibility) "#064E3B" else "#451A03", 12)
+
+              if (hasOverlay && hasAccessibility) {
+                  statusBadge.text = "جاهز للعمل ●"
+                  statusBadge.setTextColor(Color.parseColor("#34D399"))
+                  statusBadge.background = roundedBg("#064E3B", 20, "#10B981")
+              } else {
+                  statusBadge.text = "متوقف"
+                  statusBadge.setTextColor(Color.parseColor("#94A3B8"))
+                  statusBadge.background = roundedBg("#1E293B", 20, "#334155")
+              }
+
+              val overlayShown = TapAccessibilityService.instance?.isOverlayVisible() == true
+              launchBtn.text = if (overlayShown) "إخفاء المؤشر العائم" else "🚀 تفعيل المؤشر العائم الآن"
+          }
+
+          private fun handleLaunchClick() {
+              if (!Settings.canDrawOverlays(this)) {
+                  Toast.makeText(this, "فعّل صلاحية الظهور فوق التطبيقات أولاً", Toast.LENGTH_SHORT).show()
+                  return
+              }
+              val service = TapAccessibilityService.instance
+              if (service == null) {
+                  Toast.makeText(this, "فعّل خدمة إمكانية الوصول لـ TapPulse Pro أولاً", Toast.LENGTH_SHORT).show()
+                  return
+              }
+
+              if (service.isOverlayVisible()) {
+                  service.hideOverlay()
+                  refreshPermissionStatuses()
+              } else {
+                  service.showOverlay()
+                  refreshPermissionStatuses()
+                  Toast.makeText(this, "تم تفعيل المؤشر! افتح لايف تيك توك الآن 🚀", Toast.LENGTH_LONG).show()
+                  moveTaskToBack(true)
+              }
+          }
+      }
+      FILE_EOF
+
+  - name: Build Debug APK
+    run: gradle assembleDebug --no-daemon
+
+  - name: Upload TapPulsePro APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: TapPulsePro-APK
+      path: app/build/outputs/apk/debug/app-debug.apk
